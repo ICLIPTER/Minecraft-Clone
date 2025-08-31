@@ -66,6 +66,3 @@ cmake --build build --config Release
 
 ---
 
-Would you like me to help you tailor this further — like adding more technical details, roadmap, or setup instructions?
-
-
