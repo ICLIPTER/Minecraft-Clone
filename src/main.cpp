@@ -5,19 +5,105 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
+#include <cstdlib>
+#include <ctime>
 
-// === SHADERS ===
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+float lastX = SCR_WIDTH / 2.0f;
+float lastY = SCR_HEIGHT / 2.0f;
+float yaw = -90.0f;
+float pitch = 0.0f;
+float fov = 45.0f;
+
+glm::vec3 cameraPos = glm::vec3(0.0f, 5.0f, 10.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
+
+struct Cube {
+    glm::vec3 position;
+    glm::vec3 color;
+};
+
+std::vector<Cube> world;
+
+// Function to generate random terrain
+void generateTerrain(int width, int depth, int maxHeight) {
+    srand((unsigned)time(0));
+    for (int x = -width / 2; x < width / 2; x++) {
+        for (int z = -depth / 2; z < depth / 2; z++) {
+            int height = rand() % maxHeight + 1; // random height
+            for (int y = 0; y < height; y++) {
+                Cube cube;
+                cube.position = glm::vec3(x, y, z);
+                if (y == height - 1)
+                    cube.color = glm::vec3(0.1f, 0.8f, 0.1f); // grass top
+                else
+                    cube.color = glm::vec3(0.6f, 0.3f, 0.1f); // dirt
+                world.push_back(cube);
+            }
+        }
+    }
+}
+
+// Cube vertices
+float vertices[] = {
+    // positions          // colors
+   -0.5f, -0.5f, -0.5f,   1.0f, 0.0f, 0.0f,
+    0.5f, -0.5f, -0.5f,   0.0f, 1.0f, 0.0f,
+    0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,
+    0.5f,  0.5f, -0.5f,   0.0f, 0.0f, 1.0f,
+   -0.5f,  0.5f, -0.5f,   1.0f, 1.0f, 0.0f,
+   -0.5f, -0.5f, -0.5f,   1.0f, 0.0f, 0.0f,
+
+   -0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,
+    0.5f, -0.5f,  0.5f,   0.0f, 1.0f, 1.0f,
+    0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 1.0f,
+    0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 1.0f,
+   -0.5f,  0.5f,  0.5f,   0.5f, 0.5f, 0.5f,
+   -0.5f, -0.5f,  0.5f,   1.0f, 0.0f, 1.0f,
+
+   -0.5f,  0.5f,  0.5f,   0.5f, 0.0f, 0.0f,
+   -0.5f,  0.5f, -0.5f,   0.0f, 0.5f, 0.0f,
+   -0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 0.5f,
+   -0.5f, -0.5f, -0.5f,   0.0f, 0.0f, 0.5f,
+   -0.5f, -0.5f,  0.5f,   0.5f, 0.5f, 0.0f,
+   -0.5f,  0.5f,  0.5f,   0.5f, 0.0f, 0.0f,
+
+    0.5f,  0.5f,  0.5f,   0.0f, 0.5f, 0.5f,
+    0.5f,  0.5f, -0.5f,   0.5f, 0.0f, 0.5f,
+    0.5f, -0.5f, -0.5f,   1.0f, 0.5f, 0.0f,
+    0.5f, -0.5f, -0.5f,   1.0f, 0.5f, 0.0f,
+    0.5f, -0.5f,  0.5f,   0.0f, 0.5f, 0.5f,
+    0.5f,  0.5f,  0.5f,   0.0f, 0.5f, 0.5f,
+
+   -0.5f, -0.5f, -0.5f,   0.3f, 0.3f, 0.3f,
+    0.5f, -0.5f, -0.5f,   0.6f, 0.6f, 0.6f,
+    0.5f, -0.5f,  0.5f,   0.9f, 0.9f, 0.9f,
+    0.5f, -0.5f,  0.5f,   0.9f, 0.9f, 0.9f,
+   -0.5f, -0.5f,  0.5f,   0.2f, 0.2f, 0.2f,
+   -0.5f, -0.5f, -0.5f,   0.3f, 0.3f, 0.3f,
+
+   -0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 0.0f,
+    0.5f,  0.5f, -0.5f,   0.0f, 1.0f, 0.0f,
+    0.5f,  0.5f,  0.5f,   0.0f, 0.0f, 1.0f,
+    0.5f,  0.5f,  0.5f,   0.0f, 0.0f, 1.0f,
+   -0.5f,  0.5f,  0.5f,   1.0f, 1.0f, 0.0f,
+   -0.5f,  0.5f, -0.5f,   1.0f, 0.0f, 0.0f
+};
+
 const char* vertexShaderSource = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
-
 out vec3 ourColor;
-
-uniform mat4 projection;
-uniform mat4 view;
 uniform mat4 model;
-
+uniform mat4 view;
+uniform mat4 projection;
 void main()
 {
     gl_Position = projection * view * model * vec4(aPos, 1.0);
@@ -27,32 +113,17 @@ void main()
 
 const char* fragmentShaderSource = R"(
 #version 330 core
-in vec3 ourColor;
 out vec4 FragColor;
-
+in vec3 ourColor;
+uniform vec3 overrideColor;
 void main()
 {
-    FragColor = vec4(ourColor, 1.0);
+    FragColor = vec4(overrideColor, 1.0);
 }
 )";
 
-// Camera
-glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
-
-float deltaTime = 0.0f;
-float lastFrame = 0.0f;
-
-// Mouse
-float yaw = -90.0f;
-float pitch = 0.0f;
-float lastX = 400, lastY = 300;
-bool firstMouse = true;
-
-void processInput(GLFWwindow* window)
-{
-    float cameraSpeed = 2.5f * deltaTime;
+void processInput(GLFWwindow* window) {
+    float cameraSpeed = 5.0f * deltaTime;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         cameraPos += cameraSpeed * cameraFront;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -63,29 +134,18 @@ void processInput(GLFWwindow* window)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 }
 
-void mouse_callback(GLFWwindow* window, double xpos, double ypos)
-{
-    if (firstMouse)
-    {
-        lastX = (float)xpos;
-        lastY = (float)ypos;
-        firstMouse = false;
-    }
-
-    float xoffset = (float)xpos - lastX;
-    float yoffset = lastY - (float)ypos;
-    lastX = (float)xpos;
-    lastY = (float)ypos;
-
+void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     float sensitivity = 0.1f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
+    float xoffset = (xpos - lastX) * sensitivity;
+    float yoffset = (lastY - ypos) * sensitivity;
+    lastX = xpos;
+    lastY = ypos;
 
-    yaw   += xoffset;
+    yaw += xoffset;
     pitch += yoffset;
 
-    if(pitch > 89.0f) pitch = 89.0f;
-    if(pitch < -89.0f) pitch = -89.0f;
+    if (pitch > 89.0f) pitch = 89.0f;
+    if (pitch < -89.0f) pitch = -89.0f;
 
     glm::vec3 front;
     front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -94,142 +154,59 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
     cameraFront = glm::normalize(front);
 }
 
-unsigned int compileShader(unsigned int type, const char* source)
-{
-    unsigned int shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, NULL);
-    glCompileShader(shader);
-
-    int success;
-    char infoLog[512];
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if(!success)
-    {
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    return shader;
-}
-
-unsigned int createShaderProgram(const char* vertexSrc, const char* fragmentSrc)
-{
-    unsigned int vertexShader = compileShader(GL_VERTEX_SHADER, vertexSrc);
-    unsigned int fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSrc);
-
-    unsigned int shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    int success;
-    char infoLog[512];
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if(!success)
-    {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << "ERROR::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    return shaderProgram;
-}
-
-int main()
-{
+int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Minecraft Clone", NULL, NULL);
-    if (window == NULL)
-    {
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Minecraft Clone", NULL, NULL);
+    if (!window) {
         std::cout << "Failed to create GLFW window\n";
         glfwTerminate();
         return -1;
     }
     glfwMakeContextCurrent(window);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         std::cout << "Failed to initialize GLAD\n";
         return -1;
     }
 
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSetCursorPosCallback(window, mouse_callback);
-
     glEnable(GL_DEPTH_TEST);
 
-    // Cube vertices (pos + color)
-    float vertices[] = {
-        // positions         // colors
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-         0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,
-         0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
-         0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,
-        -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,
-
-        -0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 1.0f,
-         0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 1.0f,
-         0.5f,  0.5f,  0.5f,  0.5f, 0.5f, 0.5f,
-         0.5f,  0.5f,  0.5f,  0.5f, 0.5f, 0.5f,
-        -0.5f,  0.5f,  0.5f,  0.3f, 0.7f, 0.2f,
-        -0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 1.0f,
-
-        -0.5f,  0.5f,  0.5f,  0.8f, 0.3f, 0.5f,
-        -0.5f,  0.5f, -0.5f,  0.2f, 0.6f, 0.9f,
-        -0.5f, -0.5f, -0.5f,  0.9f, 0.1f, 0.3f,
-        -0.5f, -0.5f, -0.5f,  0.9f, 0.1f, 0.3f,
-        -0.5f, -0.5f,  0.5f,  0.4f, 0.9f, 0.1f,
-        -0.5f,  0.5f,  0.5f,  0.8f, 0.3f, 0.5f,
-
-         0.5f,  0.5f,  0.5f,  0.6f, 0.6f, 0.2f,
-         0.5f,  0.5f, -0.5f,  0.1f, 0.8f, 0.3f,
-         0.5f, -0.5f, -0.5f,  0.7f, 0.1f, 0.6f,
-         0.5f, -0.5f, -0.5f,  0.7f, 0.1f, 0.6f,
-         0.5f, -0.5f,  0.5f,  0.2f, 0.2f, 0.8f,
-         0.5f,  0.5f,  0.5f,  0.6f, 0.6f, 0.2f,
-
-        -0.5f, -0.5f, -0.5f,  0.2f, 0.8f, 0.7f,
-         0.5f, -0.5f, -0.5f,  0.3f, 0.5f, 0.9f,
-         0.5f, -0.5f,  0.5f,  0.7f, 0.9f, 0.2f,
-         0.5f, -0.5f,  0.5f,  0.7f, 0.9f, 0.2f,
-        -0.5f, -0.5f,  0.5f,  0.9f, 0.2f, 0.5f,
-        -0.5f, -0.5f, -0.5f,  0.2f, 0.8f, 0.7f,
-
-        -0.5f,  0.5f, -0.5f,  0.3f, 0.2f, 0.9f,
-         0.5f,  0.5f, -0.5f,  0.8f, 0.4f, 0.1f,
-         0.5f,  0.5f,  0.5f,  0.1f, 0.7f, 0.6f,
-         0.5f,  0.5f,  0.5f,  0.1f, 0.7f, 0.6f,
-        -0.5f,  0.5f,  0.5f,  0.7f, 0.2f, 0.8f,
-        -0.5f,  0.5f, -0.5f,  0.3f, 0.2f, 0.9f
-    };
+    // Compile shaders
+    unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+    unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+    unsigned int shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
 
     unsigned int VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-
     glBindVertexArray(VAO);
-
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    // position
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-    // color
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    unsigned int shaderProgram = createShaderProgram(vertexShaderSource, fragmentShaderSource);
+    generateTerrain(20, 20, 5); // world size
 
-    while (!glfwWindowShouldClose(window))
-    {
-        float currentFrame = (float)glfwGetTime();
+    while (!glfwWindowShouldClose(window)) {
+        float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
@@ -240,19 +217,25 @@ int main()
 
         glUseProgram(shaderProgram);
 
-        glm::mat4 projection = glm::perspective(glm::radians(60.0f), 800.0f / 600.0f, 0.1f, 100.0f);
         glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(fov), (float)SCR_WIDTH / SCR_HEIGHT, 0.1f, 100.0f);
 
-        unsigned int projLoc = glGetUniformLocation(shaderProgram, "projection");
-        unsigned int viewLoc = glGetUniformLocation(shaderProgram, "view");
-        unsigned int modelLoc = glGetUniformLocation(shaderProgram, "model");
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        for (Cube& cube : world) {
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, cube.position);
+            unsigned int modelLoc = glGetUniformLocation(shaderProgram, "model");
+            unsigned int viewLoc = glGetUniformLocation(shaderProgram, "view");
+            unsigned int projLoc = glGetUniformLocation(shaderProgram, "projection");
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+            glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+            unsigned int colorLoc = glGetUniformLocation(shaderProgram, "overrideColor");
+            glUniform3fv(colorLoc, 1, glm::value_ptr(cube.color));
+
+            glBindVertexArray(VAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
